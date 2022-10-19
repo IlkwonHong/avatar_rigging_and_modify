@@ -1,8 +1,7 @@
-from turtle import color
-from pyparsing import col
-from a_python.rigging_class.bone_names import *
 import pickle as pkl
+from shutil import move
 import numpy as np
+from a_python.rigging_class.bone_names import *
 import copy
 import open3d as o3d
 from a_python.utils.rot import _rot_base
@@ -63,9 +62,9 @@ class rig_base():
         self.idx_vertices_for_bone = idx_vertices_for_bone[idx]
 
         # weight unnormalized
-        self.weight_vertices_for_bone = weight_vertices_for_bone[idx] 
+        # self.weight_vertices_for_bone = weight_vertices_for_bone[idx] 
         # # weight normalized
-        # self.weight_vertices_for_bone = weight_vertices_for_bone[idx] /  weight_sum[self.idx_vertices_for_bone]
+        self.weight_vertices_for_bone = weight_vertices_for_bone[idx] /  weight_sum[self.idx_vertices_for_bone]
         
         self.n_verts = self.idx_vertices_for_bone.shape[0]
 
@@ -73,6 +72,7 @@ class rig_base():
         self.disp_to_scale = np.zeros([self.n_verts,3])
         self.trans_head = np.zeros(3)
         self.trans_tail = np.zeros(3)
+        
 
 class rig_class(rig_base):
     def __init__(self, idx):
@@ -83,25 +83,12 @@ class rig_class(rig_base):
                 self.childs.append(rig_class(idx))
         else :
             self.childs = None
-    
-    # # TODO
-    # def transform(self, tail_to):
-    #     _scale_longi = np.linalg.norm(self.head - self.tail_to)/self.len
-    #     # _rotation
 
-    # # TODO
-    # def weighted_translate(self, v_trans):
-    #     self.head = self.head + v_trans
-    #     self.vertices[self.idx_vertices_for_bone] += self.vertices[self.idx_vertices_for_bone]\
-    #         * self.weight_vertices_for_bone[:,None]* (v_trans)
-        
-    # # TODO    
-    # def scale_longi(self, scale):
-    #     self.vertices[self.idx_vertices_for_bone] += self.vertices[self.idx_vertices_for_bone]\
-    #         * self.weight_vertices_for_bone[:,None]* (scale - 1)
-        
-    #     if self.child is not None:
-    #         self.child
+    def concat_weights(self, weight_all):
+        weight_all[self.idx_vertices_for_bone] += self.weight_vertices_for_bone
+        if self.childs is not None:
+            for child in self.childs:
+                child.concat_weights(weight_all)
 
     def scale_all(self, scale):
         self.trans_tail = (self.tail - self.head) * scale + self.head - self.tail
@@ -112,16 +99,7 @@ class rig_class(rig_base):
             for child in self.childs:       
                 child.trans_head += self.trans_tail
 
-    # head만 잡고 움직이는 경우
-    # def translate_head(self):
-    #     if self.childs is not None:
-    #         for child in self.childs:       
-    #             child.trans_head += self.trans_head
 
-    #     _vertices[self.idx_vertices_for_bone] += self.weight_vertices_for_bone[:,None] @ self.trans_head[None,:]
-    #     self.head += self.trans_head
-    #     self.tail += self.trans_head
-    #     self.trans_head *= 0
     def translate_head(self):
         trans = copy.deepcopy(self.trans_head)
         self.trans_head *= 0
@@ -134,39 +112,47 @@ class rig_class(rig_base):
                 child.trans_head += trans
                 child.translate_head()
 
+    def scale_longi_hier(self, scale):
+        # dir_bone = (self.tail - self.head)/np.linalg.norm(self.tail - self.head)
+        # verts_projected = (_vertices[:,:] - self.head )@ dir_bone[:,None] 
+        # move_along_vec = (verts_projected * (scale - 1)) * dir_bone
+        # _weight_sum = np.zeros([vertices.shape[0]])
+        # self.concat_weights(_weight_sum)
+        # _vertices[:,:] += _weight_sum[:,None] * move_along_vec
 
-    def rot(self, mat_rot):
-        # _vertices[self.idx_vertices_for_bone] -= center
-        
-        # _vertices[self.idx_vertices_for_bone] += \
-        #     self.weight_vertices_for_bone[:,None] * \
-        #         ((mat_rot @ _vertices[self.idx_vertices_for_bone].T).T - _vertices[self.idx_vertices_for_bone] )
-        
-        # _vertices[self.idx_vertices_for_bone] += center
-        # self.head = (mat_rot @ (self.head - center).T).T + center
-        # self.tail = (mat_rot @ (self.tail - center).T).T + center
-        
-        # if self.childs is not None:
-        #     for child in self.childs:       
-        #         child.rot(mat_rot, center)
 
-        _vertices[self.idx_vertices_for_bone] -= self.head
-        _vertices[self.idx_vertices_for_bone] += \
-            self.weight_vertices_for_bone[:,None] * \
-                ((mat_rot @ _vertices[self.idx_vertices_for_bone].T).T - _vertices[self.idx_vertices_for_bone] )
-        
-        _vertices[self.idx_vertices_for_bone] += self.head
-        trans_tail = (mat_rot @ (self.tail - self.head).T).T + self.head - self.tail
+        dir_bone = (self.tail - self.head)/np.linalg.norm(self.tail - self.head)
+        verts_projected = (_vertices[self.idx_vertices_for_bone] - self.head) @ dir_bone[:,None] 
+        move_along_vec = (verts_projected * (scale - 1)) * dir_bone
+
+        _vertices[self.idx_vertices_for_bone] += self.weight_vertices_for_bone[:,None] * move_along_vec
+        self.tail += (self.tail - self.head) * (scale - 1) 
+
+        if self.childs is not None:
+            for child in self.childs:       
+                child.trans_head += (self.tail - self.head) * (scale - 1)
+                child.translate_head()
+
+
+
+    
+    def rot_rig_update(self, mat_rot, center):
+        self.head = (mat_rot @ (self.head - center).T).T + center
+        trans_tail = (mat_rot @ (self.tail - center).T).T + center - self.tail
         self.tail += trans_tail
-        
         if self.childs is not None:
-            for child in self.childs:   
-                child.trans_head = trans_tail
-                child.translate_head()    
-        if self.childs is not None:
-            for child in self.childs:  
-                child.rot(mat_rot)
+            for child in self.childs:
+                child.rot_rig_update(mat_rot, center)
 
+    # TODO : 관절별 로테이션으로 구현, local 좌표계 구현
+    def rot(self, mat_rot, center):
+        _weight_sum = np.zeros([vertices.shape[0]])
+        self.concat_weights(_weight_sum)
+        _vertices[:,:] -= center
+        _vertices[:,:] += _weight_sum[:,None] * ((mat_rot @ _vertices.T).T - _vertices )
+        _vertices[:,:] += center
+
+        self.rot_rig_update(mat_rot, center)
 
     def update(self):
         '''전부 head기준으로 움직임'''
@@ -186,14 +172,15 @@ class rig_class(rig_base):
 
 
 # 디버깅 visualize용
-tmp = rig_class(149)
-# tmp = rig_class(150)
+tmp = rig_class(153)
 
-# tmp.trans_head = np.array([0,0,13])
-# tmp.translate_head()
-# tmp.scale_all(0.7)
-# tmp.update()
-tmp.rot(_rot_base('x', np.pi/3))
+tmp = rig_class(149)
+tmp.scale_longi_hier(1.5)
+tmp.childs[0].childs[0].rot(_rot_base('x', np.pi/3), tmp.childs[0].childs[0].head)
+tmp.childs[0].rot(_rot_base('x', np.pi/2), tmp.childs[0].head)
+tmp.rot(_rot_base('z', np.pi/5), tmp.head)
+tmp.rot(_rot_base('x', -np.pi/3), tmp.head)
+
 
 colors = np.ones([weight_sum.shape[0],3]) * 0.5
 colors[:,0] = weight_sum
@@ -214,54 +201,5 @@ o3d.visualization.draw_geometries([pcd, coord, joint_head, joint_tail])
 
 
 
-idx_hier[149]
 
-
-
-# class rig_base():
-#     def __init__(self, vertices, idx, head, tail, idx_child):
-#         self.vertices = vertices
-#         self.head = head
-#         self.tail = tail
-#         self.idx = idx
-#         self.len = np.linalg.norm(self.head - self.tail)
-
-#         self.child = idx_child
-
-#         self.idx_vertices_for_bone = idx_vertices_for_bone[idx] 
-#         self.weight_vertices_for_bone = weight_vertices_for_bone[idx] 
-#         self.name = bone_idx[idx]
-
-# class rig_class():
-#     def __init__(self, vertices, idx, head, tail, idx_child):
-#         self.vertices = vertices
-        
-#         self.head = head
-#         self.tail = tail
-#         self.child = idx_child
-#         self.idx = idx
-        
-#         self.len = np.linalg.norm(self.head - self.tail)
-
-#         self.idx_vertices_for_bone = idx_vertices_for_bone[idx] 
-#         self.weight_vertices_for_bone = weight_vertices_for_bone[idx] 
-#         self.name = bone_idx[idx]
-
-#     def transform(self, tail_to):
-#         _scale_longi = np.linalg.norm(self.head - self.tail_to)/self.len
-#         # _rotation
-
-#     def weighted_translate(self, v_trans):
-#         self.head = self.head + v_trans
-#         self.vertices[self.idx_vertices_for_bone] += self.vertices[self.idx_vertices_for_bone]\
-#             * self.weight_vertices_for_bone[:,None]* (v_trans)
-        
-    
-#     def scale_longi(self, scale):
-#         self.vertices[self.idx_vertices_for_bone] += self.vertices[self.idx_vertices_for_bone]\
-#             * self.weight_vertices_for_bone[:,None]* (scale - 1)
-        
-#         if self.child is not None:
-#             self.child
-    
 
