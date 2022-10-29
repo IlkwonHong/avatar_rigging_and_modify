@@ -1,5 +1,6 @@
 import math
 import pickle as pkl
+from matplotlib.pyplot import sca
 import numpy as np
 from a_python.rigging_class.bone_names import *
 import copy
@@ -35,7 +36,7 @@ bone_ids = np.asarray(bone_ids)
 vert_ids = np.asarray(vert_ids)
 weights = np.asarray(weights)
 bone_head_tail = np.asarray(bone_head_tail)
-_vertices = copy.deepcopy(vertices)
+# _vertices = copy.deepcopy(vertices)
 
 
 
@@ -118,17 +119,17 @@ class rig_class(rig_base):
 
 
 
-    def scale_y(self, scale):
+    def scale_y(self, scale, _vertices):
         verts_projected_vec = ((_vertices[self.idx_vertices_for_bone] - self.head) @ self.dir_y[:,None]) * self.dir_y
         to_move = verts_projected_vec * (scale - 1)
         _vertices[self.idx_vertices_for_bone] += self.weight_vertices_for_bone[:,None] * to_move
 
-    def scale_z(self, scale):
+    def scale_z(self, scale, _vertices):
         verts_projected_vec = ((_vertices[self.idx_vertices_for_bone] - self.head) @ self.dir_z[:,None]) * self.dir_z
         to_move = verts_projected_vec * (scale - 1)
         _vertices[self.idx_vertices_for_bone] += self.weight_vertices_for_bone[:,None] * to_move
 
-    def scale_iso_hier(self, scale):
+    def scale_iso_hier(self, scale, _vertices):
         _weight_sum = np.zeros([vertices.shape[0]])
         self.concat_weights(_weight_sum)
         to_move = (_vertices[:,:] - self.head) * (scale - 1)
@@ -136,14 +137,14 @@ class rig_class(rig_base):
         self.scale_update(scale, self.head)
 
     # 관절 로컬좌표계 기준이라서 그닥 필요없을듯
-    def scale_y_hier(self, scale):
+    def scale_y_hier(self, scale, _vertices):
         _weight_sum = np.zeros([vertices.shape[0]])
         self.concat_weights(_weight_sum)
         verts_projected_vec = ((_vertices[:,:] - self.head) @ self.dir_y[:,None]) * self.dir_y
         to_move = verts_projected_vec * (scale - 1)
         _vertices[:,:] += _weight_sum[:,None] * to_move
 
-    def scale_z_hier(self, scale):
+    def scale_z_hier(self, scale, _vertices):
         _weight_sum = np.zeros([vertices.shape[0]])
         self.concat_weights(_weight_sum)
         verts_projected_vec = ((_vertices[:,:] - self.head) @ self.dir_z[:,None]) * self.dir_z
@@ -151,7 +152,7 @@ class rig_class(rig_base):
         _vertices[:,:] += _weight_sum[:,None] * to_move
     # TODO end
 
-    def trans_head(self, trans, coord='world'):
+    def trans_head(self, trans, _vertices, coord='world'):
         if coord == 'world':
             _vertices[self.idx_vertices_for_bone] += self.weight_vertices_for_bone[:,None] * trans
             _T_global = np.eye(4)
@@ -161,7 +162,7 @@ class rig_class(rig_base):
 
         if self.childs is not None:
             for child in self.childs:
-                child.trans_head(trans, coord)
+                child.trans_head(trans, _vertices, coord)
     
     def rot_update(self, mat_rot, center):
         _T_global1 = np.eye(4)
@@ -181,7 +182,7 @@ class rig_class(rig_base):
                 child.rot_update(mat_rot, center)
 
 
-    def rot(self, mat_rot):
+    def rot(self, mat_rot, _vertices):
         _weight_sum = np.zeros([vertices.shape[0]])
         self.concat_weights(_weight_sum)
         _vertices[:,:] -= self.head
@@ -189,7 +190,7 @@ class rig_class(rig_base):
         _vertices[:,:] += self.head
         self.rot_update(mat_rot, self.head)
 
-    def reset_vertices(self):
+    def reset_vertices(self, _vertices):
         _vertices[:,:] = copy.deepcopy(vertices)
 
     # for debug
@@ -211,7 +212,95 @@ class rig_class(rig_base):
         if self.childs is not None:
             for child in self.childs:
                 child.print_name()
+
+    def scaling_joint_len(self, _vertices, keypts, img_seg):
+        if self.name != 'hips':
+            return
+        
+        # # 밑위 길이 기준
+
+
+        # # 하체 스케일링
+        # len_spine = np.linalg.norm(((keypts[2,:] + keypts[5,:]) - (keypts[9,:] + keypts[12,:]))/2)
+        # len_pelvis = np.linalg.norm((keypts[9,:] - keypts[12,:]))
+        # len_leg_upper = (np.linalg.norm(keypts[9,:] - keypts[10,:]) + np.linalg.norm(keypts[12,:] - keypts[13,:]))/2
+        # len_leg_lower = (np.linalg.norm(keypts[10,:] - keypts[11,:]) + np.linalg.norm(keypts[13,:] - keypts[14,:]))/2
+
+        # len_maya_pelvis = np.linalg.norm(joint_mat[6,:3,3] - joint_mat[15,:3,3])
+        # len_maya_leg_upper = np.linalg.norm(joint_mat[6,:3,3] - joint_mat[4,:3,3])
+        # len_maya_leg_lower = np.linalg.norm(joint_mat[4,:3,3] - joint_mat[1,:3,3])
+
+        # scale_img_to_maya = len_maya_pelvis / len_pelvis
+
+        # scale_to_align_leg_upper = len_leg_upper * scale_img_to_maya / len_maya_leg_upper
+        # scale_to_align_leg_lower = (len_leg_lower * scale_img_to_maya / len_maya_leg_lower)/scale_to_align_leg_upper
+
+        # self.childs[1].childs[0].scale_iso_hier(scale_to_align_leg_upper, _vertices)
+        # self.childs[1].childs[0].childs[0].childs[0].scale_iso_hier(scale_to_align_leg_lower, _vertices)
+        # self.childs[1].childs[1].scale_iso_hier(scale_to_align_leg_upper, _vertices)
+        # self.childs[1].childs[1].childs[0].childs[0].scale_iso_hier(scale_to_align_leg_lower, _vertices)
+
+        # 밑위 길이 기준
+        h, w = img_seg.shape
+
+        x = np.linspace(0, w-1, w)
+        y = np.linspace(0, h-1, h)
+        xx, yy = np.meshgrid(x,y)
+
+        mask_seg = img_seg ==2
+        y_crotch = yy[mask_seg].max()
+        x_crotch = xx[mask_seg][np.argmax(yy[mask_seg])]
+        len_crotch_to_pelv = np.linalg.norm(np.mean(keypts[[9,12],:2], axis=0) - np.array([x_crotch, y_crotch]))
+        len_crotch_to_pelv_maya = np.linalg.norm((joint_mat[6,:3,3] + joint_mat[15,:3,3])/2 - vertices[3106,:])
+
+        scale_align_croth_to_pelv = len_crotch_to_pelv / len_crotch_to_pelv_maya
+
+        # 하체 스케일링
+        len_spine = np.linalg.norm(((keypts[2,:] + keypts[5,:]) - (keypts[9,:] + keypts[12,:]))/2)
+        len_pelvis = np.linalg.norm((keypts[9,:] - keypts[12,:]))
+        len_leg_upper = (np.linalg.norm(keypts[9,:] - keypts[10,:]) + np.linalg.norm(keypts[12,:] - keypts[13,:]))/2
+        len_leg_lower = (np.linalg.norm(keypts[10,:] - keypts[11,:]) + np.linalg.norm(keypts[13,:] - keypts[14,:]))/2
+
+        len_maya_pelvis = np.linalg.norm(joint_mat[6,:3,3] - joint_mat[15,:3,3])
+        len_maya_leg_upper = np.linalg.norm(joint_mat[6,:3,3] - joint_mat[4,:3,3])
+        len_maya_leg_lower = np.linalg.norm(joint_mat[4,:3,3] - joint_mat[1,:3,3])
+
+        scale_align_pelvis = len_pelvis / (scale_align_croth_to_pelv * len_maya_pelvis)
+
+        scale_align_leg_upper = len_leg_upper / \
+            (scale_align_pelvis * scale_align_croth_to_pelv * len_maya_leg_upper)
+        scale_align_leg_lower = len_leg_lower /\
+            (scale_align_pelvis * scale_align_croth_to_pelv * scale_align_leg_upper * len_maya_leg_lower)
+
+        self.scale_iso_hier(scale_align_croth_to_pelv, _vertices)
+        self.childs[1].scale_iso_hier(scale_align_pelvis, _vertices)
+
+        # TODO_start : 상체 정리.... 일단은 hipscale이 1이 되로록 했음 이건 나중에 상체 굴곡 보고 최적화로 바꿔야할듯
+        self.childs[2].scale_iso_hier(scale_align_pelvis, _vertices)
+        # TODOend
+
+        self.childs[1].childs[0].scale_iso_hier(scale_align_leg_upper, _vertices)
+        self.childs[1].childs[0].childs[0].childs[0].scale_iso_hier(scale_align_leg_lower, _vertices)
+        self.childs[1].childs[1].scale_iso_hier(scale_align_leg_upper, _vertices)
+        self.childs[1].childs[1].childs[0].childs[0].scale_iso_hier(scale_align_leg_lower, _vertices)
+
+        print("scales:",scale_align_croth_to_pelv, "," ,scale_align_pelvis,"," ,scale_align_leg_upper, "," ,scale_align_leg_lower)
+        return [x_crotch, y_crotch]
+            
     
+    def len_leg_seg(self, _vertices):
+        len_thigh_crotch = np.linalg.norm(_vertices[3127,:2] - _vertices[3440,:2])
+        len_knee = np.linalg.norm(_vertices[8115,:2] - _vertices[8124,:2])
+        len_ankle = np.linalg.norm(_vertices[7866,:2] - _vertices[7878,:2])
+        return len_thigh_crotch, len_knee, len_ankle
+
+    # def len_leg_upper(self, _vertices):
+
+
+
+
+
+
 
 
 # _list_joint = []

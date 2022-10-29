@@ -144,7 +144,6 @@ class rig_class(rig_base):
             for child in self.childs:
                 child.rot_rig_update(mat_rot, center)
 
-    # TODO : 관절별 로테이션으로 구현, local 좌표계 구현
     def rot(self, mat_rot, center):
         _weight_sum = np.zeros([vertices.shape[0]])
         self.concat_weights(_weight_sum)
