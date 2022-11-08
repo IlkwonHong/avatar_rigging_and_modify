@@ -28,21 +28,25 @@ if __name__ == "__main__":
     for _idx, vertex in enumerate(vertices) :
         json_vertices["deformerWeight"]["shapes"][0]["points"].append({
             "index": _idx,
-            "value": vertex
+            "value": [
+                vertex[0],
+                vertex[1],
+                vertex[2]
+                ]
         })
 
 
-    json_vertices["deformerWeight"]["shapes"][0]["points"].append({
-        "index": 0,
-        "value": [
-            -3.933340072631836,
-            99.70133972167969,
-            7.72953987121582
-        ]
-    })
+    # json_vertices["deformerWeight"]["shapes"][0]["points"].append({
+    #     "index": 0,
+    #     "value": [
+    #         -3.933340072631836,
+    #         99.70133972167969,
+    #         7.72953987121582
+    #     ]
+    # })
 
     with open(json_save_path, 'w') as f:
-        json.dump(json_vertices, f)
+        json.dump(json_vertices, f, indent=4, sort_keys=True)
 
 
     # json_vertices["deformerWeight"]["shapes"][0]["name"] = "baseShape"

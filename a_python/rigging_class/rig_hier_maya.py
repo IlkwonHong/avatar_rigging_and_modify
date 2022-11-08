@@ -28,8 +28,6 @@ joint_mat = np.reshape(joint_mat, [-1,4,4]).transpose([0,2,1])
 joint_name = np.asarray(joint_name)
 
 
-
-
 # to np
 vertices = np.asarray(vertices)
 bone_ids = np.asarray(bone_ids)
@@ -45,12 +43,21 @@ for _idx, _weight in zip(joint_group_verts, joint_weight):
      weight_sum[_idx] += _weight
 
 
-vec1 = joint_mat[1,:3,3] - joint_mat[2,:3,3]
-vec2 = joint_mat[1,0,:3]
-vec2 = joint_mat[1,:3,0]
-np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+# vec1 = joint_mat[1,:3,3] - joint_mat[2,:3,3]
+# vec2 = joint_mat[1,0,:3]
+# vec2 = joint_mat[1,:3,0]
+# np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
 
-    # [joint_name, joint_weight, joint_group_verts] = pkl.load(f)
+#     # [joint_name, joint_weight, joint_group_verts] = pkl.load(f)
+
+
+# upper key length
+upper_body = [64, 63, 18, 17, 16, 65]       # head, neck, chestupper, chest, spine, hip
+len_joint_upper = np.linalg.norm(joint_mat[upper_body[:-1],:3,3] - joint_mat[upper_body[1:],:3,3], axis=1)
+len_joint_upper = len_joint_upper[1:] 
+len_joint_upper = len_joint_upper / len_joint_upper.sum()
+
+
 
 # 본별로 인덱스만 가져와서 변위 스케일만 갖다주자! self.vertices[self.idx_vertices_for_bone]* self.weight_vertices_for_bone[:,None]* (v_trans)
 class rig_base():
@@ -128,6 +135,13 @@ class rig_class(rig_base):
         verts_projected_vec = ((_vertices[self.idx_vertices_for_bone] - self.head) @ self.dir_z[:,None]) * self.dir_z
         to_move = verts_projected_vec * (scale - 1)
         _vertices[self.idx_vertices_for_bone] += self.weight_vertices_for_bone[:,None] * to_move
+
+    def scale_w_kpts(self, index, scale, _vertices):
+        _weight = self.weight_vertices_for_bone[np.where(self.idx_vertices_for_bone==index)]
+        scale_for_weight = 1/_weight*(scale - 1) + 1
+        self.scale_y(scale_for_weight, _vertices)
+        self.scale_z(scale_for_weight, _vertices)
+        return
 
     def scale_iso_hier(self, scale, _vertices):
         _weight_sum = np.zeros([vertices.shape[0]])
