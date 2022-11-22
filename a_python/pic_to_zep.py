@@ -16,114 +16,57 @@ def img_upperbody_maya_joints(keypts):
     img_chsetupper = (img_neck - img_hip) * (len_joint_upper[-1] + len_joint_upper[-2] + len_joint_upper[-3])  + img_hip
     return img_hip, img_neck, img_spine, img_chest, img_chsetupper
 
+def fitting_based_on_upperbody_joints(body, img_spine, img_hip, _vertices):
+    '''img_upperbody_maya_joints 함수 결과 사용해서 메쉬 스케일링으로 상체 조인트위치 맞춤'''
+    # hip to spine 거리
+    _len_spine_maya = np.linalg.norm(body.head - body.childs[0].head) 
+    _len_spine_img = np.linalg.norm(img_spine - img_hip)
+
+    # 상체 조인트 맞춤
+    _spine_trans = -(_len_spine_maya - _len_spine_img) * \
+        ((-body.head + body.childs[0].head) / np.linalg.norm(body.head - body.childs[0].head))
+    body.childs[0].trans_head(_spine_trans, _vertices)
+    _scale_spine_hier = (np.linalg.norm(img_hip - img_neck) * len_joint_upper[-1]) / \
+        (np.linalg.norm(body.childs[0].head - body.childs[0].childs[0].head))
+    body.childs[0].scale_iso_hier(_scale_spine_hier, _vertices)
+
 def thigh_scaling(keypts, crotch):
     return
 
 
 
-
-
+########################################################################################
+########################################################################################
+########################################################################################
+# 데이터 로드
 folder = 11
-
-path_img = "/Users/ik/Desktop/zepeto/a_python/test_data/{}/test_resized.png".format(folder)
-path_json = "/Users/ik/Desktop/zepeto/a_python/test_data/{}/test_resized_keypoints.json".format(folder)
-path_dp = "/Users/ik/Desktop/zepeto/a_python/test_data/{}/dp_dump.pkl".format(folder)
-
 path_img = "/Users/ik/Downloads/test_set_new/{}/test_resized.png".format(folder)
 path_json = "/Users/ik/Downloads/test_set_new/{}/test_resized_keypoints.json".format(folder)
 path_dp = "/Users/ik/Downloads/test_set_new/{}/dp_dump.pkl".format(folder)
 
 with open(path_json, 'r') as f:
     data = json.load(f)
-
 with open(path_dp, 'rb') as f:
     [img_seg, img_v, img_u,_] = pkl.load(f)
 h,w = img_seg.shape
-
 keypts = np.asarray(data['people'][0]['pose_keypoints_2d']).reshape([-1,3])
 img = cv.imread(path_img)
-
-if False:
-    plt.imshow(img)
-    plt.scatter(keypts[:,0], keypts[:,1])
-    plt.show()
-
-    plt.figure(1)
-    plt.imshow(img_seg)
-    plt.figure(2)
-    plt.imshow(img_v)
-    plt.figure(3)
-    plt.imshow(img_u)
-    plt.show()
-
-if False:
-    len_shoulder = [2,5]
-    len_pelvis = [9,12]
-    leg_L = [9,10,11]
-    leg_R = [12,13,14]
-
-    len_spine = np.linalg.norm(((keypts[2,:] + keypts[5,:]) - (keypts[9,:] + keypts[12,:]))/2)
-    len_pelvis = np.linalg.norm((keypts[9,:] - keypts[12,:]))
-    len_leg_upper = (np.linalg.norm(keypts[9,:] - keypts[10,:]) + np.linalg.norm(keypts[12,:] - keypts[13,:]))/2
-    len_leg_lower = (np.linalg.norm(keypts[10,:] - keypts[11,:]) + np.linalg.norm(keypts[13,:] - keypts[14,:]))/2
-
-    len_maya_pelvis = np.linalg.norm(joint_mat[6,:3,3] - joint_mat[15,:3,3])
-    len_maya_leg_upper = np.linalg.norm(joint_mat[6,:3,3] - joint_mat[4,:3,3])
-    len_maya_leg_lower = np.linalg.norm(joint_mat[4,:3,3] - joint_mat[1,:3,3])
-
-    scale_img_to_maya = len_maya_pelvis / len_pelvis
-
-    scale_to_align_leg_upper = len_leg_upper * scale_img_to_maya / len_maya_leg_upper
-    scale_to_align_leg_lower = (len_leg_lower * scale_img_to_maya / len_maya_leg_lower)/scale_to_align_leg_upper
-
 
 body = rig_class(65)
 _vertices = copy.deepcopy(vertices)
 
-# 가랑이 찾고, 하체 맞추기용 키포인트 길이 구하기 : 가랑이부분 허벅지 두께, 무릎, 발목 폭
+
+# 가랑이 찾고, 하체 다리길이 맞추기용 키포인트 길이 구하기 : 가랑이부분 허벅지 두께, 무릎, 발목 폭
 crotch = body.scaling_joint_len(_vertices, keypts, img_seg)
 len_maya_thigh_crotch, len_maya_knee, len_maya_ankle = body.len_leg_seg(_vertices)
 
-
-# TODO : 이부분 클래스 안으로 넣을 수 있으면 넣기
-
-img_hip = (keypts[9,:2] + keypts[12,:2])/2
-img_neck = (keypts[2,:2] + keypts[5,:2])/2
-img_spine = (img_neck - img_hip) * len_joint_upper[-1] + img_hip
-img_chest = (img_neck - img_hip) * (len_joint_upper[-1] + len_joint_upper[-2]) + img_hip
-img_chsetupper = (img_neck - img_hip) * (len_joint_upper[-1] + len_joint_upper[-2] + len_joint_upper[-3])  + img_hip
-
+# 길이비율로 상체 오픈포즈에 마야 조인트 추가, 메쉬 맞추기
 img_hip, img_neck, img_spine, img_chest, img_chsetupper = img_upperbody_maya_joints(keypts)
-
-# hip to spine 거리
-_len_spine_maya = np.linalg.norm(body.head - body.childs[0].head) 
-_len_spine_img = np.linalg.norm(img_spine - img_hip)
-
-# 상체 조인트 맞춤
-_spine_trans = -(_len_spine_maya - _len_spine_img) * \
-    ((-body.head + body.childs[0].head) / np.linalg.norm(body.head - body.childs[0].head))
-body.childs[0].trans_head(_spine_trans, _vertices)
-_scale_spine_hier = (np.linalg.norm(img_hip - img_neck) * len_joint_upper[-1]) / \
-    (np.linalg.norm(body.childs[0].head - body.childs[0].childs[0].head))
-body.childs[0].scale_iso_hier(_scale_spine_hier, _vertices)
+fitting_based_on_upperbody_joints(body, img_spine, img_hip, _vertices)
 
 
 
 
-
-# pcd = o3d.geometry.PointCloud()
-# pcd.points = o3d.utility.Vector3dVector(_vertices)
-# joint_ = o3d.geometry.TriangleMesh.create_sphere(radius=1)
-# joint_.translate(body.head)
-# o3d.visualization.draw_geometries([pcd,joint_])
-
-
-
-
-
-
-
-######
 
 if True:
     # spine 두께
@@ -132,8 +75,8 @@ if True:
     _mask1 = img_seg==2
     _mask2 = (img_v < v_spine+thr) * (img_v > v_spine-thr) 
     _mask = _mask1 * _mask2
-    plt.imshow(img_seg)
-    plt.imshow(_mask)
+    # plt.imshow(img_seg)
+    # plt.imshow(_mask)
     h, w = img_seg.shape
 
     x = np.linspace(0, w-1, w)
@@ -152,6 +95,7 @@ if True:
     vec_thigh = (keypts[13,:2] - keypts[12,:2])/ np.linalg.norm((keypts[13,:] - keypts[12,:]))
     vec_thigh_perpend = np.array([vec_thigh[1], -vec_thigh[0]])
     tmp  = ((crotch - keypts[12,:2]).T @ vec_thigh) * vec_thigh + keypts[12,:2]
+
 
     val = []
     t = 0
@@ -266,20 +210,15 @@ if True:
     len_knee = np.linalg.norm(knee_width_wrt_thigh[0,:] - knee_width_wrt_thigh[1,:])
     len_ankle = np.linalg.norm(ankle[0,:] - ankle[1,:])
 
-
-
-
-
-
-    plt.figure(1)
-    plt.imshow(img_seg)
-    # plt.imshow(img_v)
-    plt.scatter(keypts[:,0], keypts[:,1])
-    plt.scatter(val[:,0], val[:,1])
-    plt.scatter(knee_width_wrt_thigh[:,0], knee_width_wrt_thigh[:,1])
-    plt.scatter(knee_width_wrt_shin[:,0], knee_width_wrt_shin[:,1])
-    plt.scatter(ankle[:,0], ankle[:,1])
-    plt.show()
+    # plt.figure(1)
+    # plt.imshow(img_seg)
+    # # plt.imshow(img_v)
+    # plt.scatter(keypts[:,0], keypts[:,1])
+    # plt.scatter(val[:,0], val[:,1])
+    # plt.scatter(knee_width_wrt_thigh[:,0], knee_width_wrt_thigh[:,1])
+    # plt.scatter(knee_width_wrt_shin[:,0], knee_width_wrt_shin[:,1])
+    # plt.scatter(ankle[:,0], ankle[:,1])
+    # plt.show()
 
 scale_knee = len_knee / len_maya_knee
 scale_thigh_crotch = len_thigh_crotch/(len_maya_thigh_crotch * scale_knee)
@@ -307,9 +246,20 @@ body.childs[1].childs[1].childs[0].childs[0].childs[0].childs[0].scale_iso_hier(
 body.childs[1].childs[0].childs[0].childs[0].childs[0].childs[0].scale_iso_hier(0.75, _vertices)
 
 
+# body.childs[1].childs[0].weight_vertices_for_bone[np.where(body.childs[1].childs[0].idx_vertices_for_bone==3127)]
+# body.childs[1].childs[0].weight_vertices_for_bone[np.where(body.childs[1].childs[0].idx_vertices_for_bone==3440)]
+# def scale_w_kpts(self, index, scale, _vertices):
+#     _weight = self.weight_vertices_for_bone[np.where(self.idx_vertices_for_bone==index)]
+#     scale_for_weight = 1/_weight*(scale - 1) + 1
+#     self.scale_y(scale_for_weight, _vertices)
+#     self.scale_z(scale_for_weight, _vertices)
+#     return
+
+# plt.imshow(img_seg)
+
 
 # upperbody fitting
-[width_img_chestupper, width_img_chest, width_img_spine] = 2 * upperbody_curve_fitting(img_seg, img_u, img_v, keypts, Debug=True)
+[width_img_chestupper, width_img_chest, width_img_spine] = 2 * upperbody_curve_fitting(img_seg, img_u, img_v, keypts, crotch, Debug=True)
 width_zep_spine = np.abs(_vertices[4998,:] - _vertices[3118,:])[0]
 scale_width_spine = width_img_spine / width_zep_spine
 body.childs[0].scale_w_kpts(4998, scale_width_spine, _vertices)
@@ -347,26 +297,7 @@ if True:
     o3d.visualization.draw_geometries(_list_joint)
 
 
+if False:
+    with open('/Users/ik/Desktop/zepeto/a_python/to_py_mesh_.pkl', 'wb') as f:
+        pkl.dump(_vertices , f)
 
-    len_maya_thigh_crotch, len_maya_knee, len_maya_ankle = body.len_leg_seg(_vertices)
-
-
-
-
-    plt.imshow(img)
-    plt.show()
-
-
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(_vertices)
-    _color = np.ones([9067,3])*np.array([0.5,0.3,1])
-    _color[3106,:] = np.array([0.1,0.9,1])
-    pcd.colors = o3d.utility.Vector3dVector(_color)
-
-    o3d.visualization.draw_geometries([pcd])
-
-with open('/Users/ik/Desktop/zepeto/a_python/to_py_mesh_.pkl', 'wb') as f:
-    pkl.dump(_vertices , f)
-
-
-vertices = _vertices

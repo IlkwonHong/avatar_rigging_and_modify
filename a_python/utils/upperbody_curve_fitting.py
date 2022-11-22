@@ -9,7 +9,7 @@ import scipy
 
 
 
-def find_body_silhouette(img_seg, img_u, img_v):
+def find_body_silhouette(img_seg, img_u, img_v, crotch):
     # '''몸통 가장자리 찾기, densepose 결과 사용해서 -> 커브 피팅에 사용'''
     # densepose uv 값으로 가장자리 가져올거라서 threshold
     v_thr = 0.01
@@ -49,21 +49,29 @@ def find_body_silhouette(img_seg, img_u, img_v):
     pts_l = []
     pts_r = []
     pts_mid = []
-    for i in range(round(bb_y_min), round(bb_y_max)):
+    for i in range(round(bb_y_min), round(crotch[1])):
         # 실루엣 왼쪽
-        if masked_u_thr_low_w_val[i,:].sum() > 0:
-            x_max = xx[i, masked_u_thr_low_w_val[i,:]][np.argmax(xx[i,masked_u_thr_low_w_val[i,:]])]
-            if masked_u_leg_l[i,:].sum() > 0:
-                x_max_leg = max(xx[i,mask_leg_l[i,:]])
-                x_max = max(x_max, x_max_leg)
+        if masked_u_thr_low_w_val[i,:].sum() + masked_u_leg_l[i,:].sum() > 0:
+            if masked_u_thr_low_w_val[i,:].sum() == 0:
+                x_max = max(xx[i,mask_leg_l[i,:]])
+            else:
+                x_max = xx[i, masked_u_thr_low_w_val[i,:]][np.argmax(xx[i,masked_u_thr_low_w_val[i,:]])]
+                if masked_u_leg_l[i,:].sum() > 0:
+                    x_max_leg = max(xx[i,mask_leg_l[i,:]])
+                    x_max = max(x_max, x_max_leg)
             pts_l.append([x_max, i])
 
+
+
         # 실루엣 오른쪽
-        if masked_u_thr_high_w_val[i,:].sum() > 0:
-            x_min = xx[i, masked_u_thr_high_w_val[i,:]][np.argmin(xx[i, masked_u_thr_high_w_val[i,:]])]
-            if masked_u_leg_r[i,:].sum() > 0:
-                x_min_leg = min(xx[i,mask_leg_r[i,:]])
-                x_min = min(x_min, x_min_leg)
+        if masked_u_thr_high_w_val[i,:].sum() + masked_u_leg_r[i,:].sum() > 0:
+            if masked_u_thr_high_w_val[i,:].sum() == 0 :
+                x_min = min(xx[i,mask_leg_r[i,:]])
+            else:
+                x_min = xx[i, masked_u_thr_high_w_val[i,:]][np.argmin(xx[i, masked_u_thr_high_w_val[i,:]])]
+                if masked_u_leg_r[i,:].sum() > 0:
+                    x_min_leg = min(xx[i,mask_leg_r[i,:]])
+                    x_min = min(x_min, x_min_leg)
             pts_r.append([x_min, i])
 
         # u=0.5
@@ -133,9 +141,9 @@ def silhouette_projected_to_spine(line_spine, pts, zepeto_joints_upperbody):
     return result, result_proj, zepeto_joints_proj
 
 
-def upperbody_curve_fitting(img_seg, img_u, img_v, keypts, Debug=False):
+def upperbody_curve_fitting(img_seg, img_u, img_v, keypts, crotch, Debug=False):
     '''chestupper, chest, spine, 폭 '''
-    pts_l, pts_r, pts_mid = find_body_silhouette(img_seg, img_u, img_v)
+    pts_l, pts_r, pts_mid = find_body_silhouette(img_seg, img_u, img_v, crotch)
     # line_spine : hip 에서 neck으로 향하는 직선, zepeto_joints_upperbody 는 목부터
     zepeto_joints_upperbody, line_spine = find_upper_zepeto_joint(keypts)
 
@@ -176,11 +184,42 @@ def upperbody_curve_fitting(img_seg, img_u, img_v, keypts, Debug=False):
 
         plt.figure('segmentation')
         plt.imshow(img_u)
+        plt.imshow(img_v)
+        plt.scatter(keypts[:,0], keypts[:,1])
         
         plt.show()
+
+
+    vec = zepeto_joints_upperbody[0] - zepeto_joints_upperbody[-1]
+    vec = vec/np.linalg.norm(vec)
+    R = np.array([
+            [np.cos(np.arctan2(-vec[1] , vec[0])) , -np.sin(np.arctan2(-vec[1] , vec[0]))],
+            [np.sin(np.arctan2(-vec[1] , vec[0])) , np.cos(np.arctan2(-vec[1] , vec[0]))]
+        ])
+
+    pts_l_prime = (R @ (pts_l-zepeto_joints_upperbody[-1]).T).T
+    pts_r_prime = (R @ (pts_r-zepeto_joints_upperbody[-1]).T).T
+    popt1, pcov = scipy.optimize.curve_fit(func,pts_l_prime[:,0], pts_l_prime[:,1])
+    res_curvefitting = func_(pts_l_prime[:,0], popt1)
+    popt2, pcov = scipy.optimize.curve_fit(func,pts_r_prime[:,0], pts_r_prime[:,1])
+    res_curvefitting_ = func_(pts_r_prime[:,0], popt2)
+    res_curvefitting_mean = func_(np.concatenate([pts_r_prime[:,0], pts_r_prime[:,1]]), (popt1 - popt2)/2)
+    
+
+    plt.scatter(pts_l_prime[:,0], pts_l_prime[:,1])
+    plt.scatter(pts_l_prime[:,0], res_curvefitting)
+    plt.scatter(pts_l_prime[:,0], -res_curvefitting)
+    ax = plt.gca()
+    ax.set_aspect('equal', adjustable='box')
+
+    plt.scatter(pts_r_prime[:,0], pts_r_prime[:,1])
+    plt.scatter(pts_r_prime[:,0], res_curvefitting_)
+    plt.scatter(np.concatenate([pts_r_prime[:,0], pts_r_prime[:,1]]), res_curvefitting_mean)
+
     return upper_kpts
 
 #####################################################################################
+
 #####################################################################################
 #####################################################################################
 
@@ -223,5 +262,41 @@ def upperbody_curve_fitting(img_seg, img_u, img_v, keypts, Debug=False):
 
 
 
+folder = 13
+path_img = "/Users/ik/Downloads/test_set_new/{}/test_resized.png".format(folder)
+path_json = "/Users/ik/Downloads/test_set_new/{}/test_resized_keypoints.json".format(folder)
+path_dp = "/Users/ik/Downloads/test_set_new/{}/dp_dump.pkl".format(folder)
+
+with open(path_json, 'r') as f:
+    data = json.load(f)
+with open(path_dp, 'rb') as f:
+    [img_seg, img_v, img_u,_] = pkl.load(f)
+h,w = img_seg.shape
+keypts = np.asarray(data['people'][0]['pose_keypoints_2d']).reshape([-1,3])
+img = cv.imread(path_img)
+
+body = rig_class(65)
+_vertices = copy.deepcopy(vertices)
+
+
+body.childs[1].childs[0].idx_vertices_for_bone
+
+
+
+_list_joint = []
+_list_joint = []
+pcd = o3d.geometry.PointCloud()
+pcd.points = o3d.utility.Vector3dVector(_vertices)
+_color = np.ones([9067,3])*np.array([0.5,0.3,1])
+# _color[body.childs[1].childs[0].idx_vertices_for_bone,:] = np.array([1.0, 0.5, 0.1])
+_color[body.childs[1].childs[0].childs[0].idx_vertices_for_bone,:] = np.array([1.0, 0.5, 0.1])
+_color[body.childs[1].childs[1].childs[0].childs[0].childs[0].idx_vertices_for_bone,:] = np.array([1.0, 1.0, 0.1])
+pcd.colors = o3d.utility.Vector3dVector(_color)
+# _pcd = o3d.geometry.PointCloud()
+# _pcd.points = o3d.utility.Vector3dVector(vertices)
+# _list_joint.append(_pcd)
+_list_joint.append(pcd)
+# body.draw_joint(_list_joint)
+o3d.visualization.draw_geometries(_list_joint)
 
 
