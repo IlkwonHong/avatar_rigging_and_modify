@@ -86,7 +86,6 @@ if True:
     _tmp_max = np.array([xx[_mask][np.argmax(xx[_mask])] , yy[_mask][np.argmax(xx[_mask])]])
     _tmp_min = np.array([xx[_mask][np.argmin(xx[_mask])] , yy[_mask][np.argmin(xx[_mask])]])
     
-    # TODO : 이거 너비 반영 안 했음 wip
     img_spine_width = np.linalg.norm(_tmp_max - _tmp_min)
 
 

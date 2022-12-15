@@ -1,6 +1,9 @@
-# WIP
-- optimization by DR
-    - lowerbody opitmization
-        [x] uppperleg scale, uppperleg twist scale, upperleg angle
-        [ ] upperleg translation 추가하기
-    - upperbody optimiation
+# 시간 문제 
+- torch maya hier에서 **rot이 오래 걸리는데** with torch no grad 켜놔서 오래 걸리나 싶기도
+- 근데 하체 최적화는 시간이 짧게 걸리네
+- 리깅 함수 내에서 시간 체크해보기
+    - 상체는 조인트가 많아서 그런것 같기도
+    - **상체를 팔 아래 부분은 없앤 DR용 클래스를 만드는것도 방법**
+
+# 진행은?
+- 일단 상하체 머리크기까지 하는걸 끝내고 해보자

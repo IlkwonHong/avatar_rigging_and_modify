@@ -8,7 +8,7 @@ import copy
 import open3d as o3d
 from a_python.utils.rot import _rot_base
 import torch
-
+import time
 
 # vertex metadata load
 with open('/Users/ik/Desktop/zepeto/a_python/to_py.pkl', 'rb') as f:
@@ -25,6 +25,8 @@ with open('/Users/ik/Desktop/zepeto/a_python/maya_joint_pos.pkl', 'rb') as f:
     [joint_mat, joint_ori, joint_leg, joint_pos] = pkl.load(f)
 with open('/Users/ik/Desktop/zepeto/data/maya_weight.pkl', 'rb') as f:
     [joint_name, joint_weight, joint_group_verts] = pkl.load(f)
+# with open('/Users/ik/Desktop/zepeto/data/maya_weight_check.pkl', 'rb') as f:
+#     [joint_name, joint_weight, joint_group_verts] = pkl.load(f)
 
 joint_mat = torch.tensor(joint_mat)    
 joint_mat = joint_mat.reshape([-1,4,4]).permute([0,2,1])
@@ -42,6 +44,18 @@ bone_head_tail = torch.tensor(bone_head_tail)
 # weight_sum = torch.zeros([vertices.shape[0]])
 # for _idx, _weight in zip(joint_group_verts, joint_weight):
 #      weight_sum[_idx] += torch.tensor(_weight)
+
+# weight_sum = torch.zeros([vertices.shape[0]])
+# for num,(_idx, _weight) in enumerate(zip(joint_group_verts, joint_weight)):
+#     if 7432 in _idx:
+#         print("bone : ",bone_idx_maya[num],"num : ",num) 
+#     weight_sum[_idx] += torch.tensor(_weight)
+
+# weight_sum.max()
+# weight_sum.min()
+# weight_sum[7432]
+
+
 
 
 # upper key length
@@ -110,11 +124,10 @@ class rig_class(rig_base):
         _T_global = torch.eye(4)
         _T_global[:3,3] += head_trans
         self.update_local_coord(_T_global)
-        
+
         if self.childs is not None:
             for child in self.childs:
                 child.scale_update(scale, center)
-
 
 
 
@@ -141,6 +154,7 @@ class rig_class(rig_base):
         to_move = (_vertices[:,:] - self.head) * (scale - 1)
         _vertices[:,:] += _weight_sum[:,None] * to_move
         self.scale_update(scale, self.head)
+
 
     # 관절 로컬좌표계 기준이라서 그닥 필요없을듯
     def scale_y_hier(self, scale, _vertices):
@@ -179,7 +193,6 @@ class rig_class(rig_base):
 
         _T_global3 = torch.eye(4)
         _T_global3[:3,3] += center
-
         _T_global = _T_global3 @ _T_global2 @ _T_global1
         self.update_local_coord(_T_global)
 
@@ -196,6 +209,7 @@ class rig_class(rig_base):
             _vertices[:,:] -= self.head
             _vertices[:,:] += _weight_sum[:,None] * ((mat_rot @ _vertices.T).T - _vertices )
             _vertices[:,:] += self.head
+        
         else:
             tmp1 = _vertices[:,:] - self.head
             tmp2 = tmp1 + _weight_sum[:,None] * ((mat_rot @ tmp1.T).T - tmp1 )
@@ -203,9 +217,10 @@ class rig_class(rig_base):
             # _vertices[:,:] = _vertices[:,:] - self.head
             # _vertices[:,:] = _vertices[:,:] + _weight_sum[:,None] * ((mat_rot @ _vertices[:,:].T).T - _vertices[:,:] )
             # _vertices[:,:] = _vertices[:,:] + self.head
+        
         # TODO : 생각해보기 이거 안하면 try to backward twice가 뜨는데 왜일까?
-        with torch.no_grad():
-            self.rot_update(mat_rot, self.head)
+        # with torch.no_grad():
+        self.rot_update(mat_rot, self.head)
 
     def reset_vertices(self, _vertices):
         _vertices[:,:] = copy.deepcopy(vertices)
@@ -213,12 +228,13 @@ class rig_class(rig_base):
     # for debug
     def draw_joint(self, _list_joint):
         joint_head = o3d.geometry.TriangleMesh.create_sphere(radius=1)
-        joint_head.translate(self.T_mat[:3,3])
+        joint_head.translate(self.T_mat[:3,3].detach())
         coord = o3d.geometry.TriangleMesh.create_coordinate_frame(size=5)
-        coord.rotate(self.T_mat[:3,:3])
-        coord.translate(self.T_mat[:3,3])
+        coord.rotate(self.T_mat[:3,:3].detach())
+        coord.translate(self.T_mat[:3,3].detach())
         _list_joint.append(coord)
         _list_joint.append(joint_head)
+        print(self.name)
         if self.childs is not None:
             for child in self.childs:
                 child.draw_joint( _list_joint)

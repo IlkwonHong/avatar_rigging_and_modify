@@ -2,7 +2,8 @@ import xml.etree.ElementTree as ET
 import numpy as np
 import pickle as pkl
 
-tree = ET.parse("./data/maya_weight_modi.xml")
+# tree = ET.parse("./data/maya_weight_modi.xml")
+tree = ET.parse("./data/check.xml")
 root = tree.getroot()
 
 joint_name = []
@@ -19,5 +20,7 @@ for i in range(2,len(root)):
     joint_weight.append(_joint_weight)
 print('end')
 
-with open('./data/maya_weight.pkl', 'wb') as f:
+# with open('./data/maya_weight.pkl', 'wb') as f:
+#     pkl.dump([joint_name, joint_weight, joint_group_verts], f)
+with open('./data/maya_weight_check.pkl', 'wb') as f:
     pkl.dump([joint_name, joint_weight, joint_group_verts], f)
